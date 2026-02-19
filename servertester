@@ -1,0 +1,236 @@
+local Players = game:GetService('Players')
+local TweenService = game:GetService('TweenService')
+local HttpService = game:GetService('HttpService')
+local UserInputService = game:GetService('UserInputService')
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild('PlayerGui')
+
+-- Menggunakan RoProxy karena API asli mati dan Roblox memblokir direct request ke domain sendiri
+local PROXY_URL = 'https://games.roproxy.com/v1/games/' .. game.PlaceId .. '/servers/Public?sortOrder=Desc&limit=50'
+
+local isMobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+local screenSize = workspace.CurrentCamera.ViewportSize
+
+local ProtectGui = protectgui or (syn and syn.protect_gui) or function() end
+local screenGui = Instance.new('ScreenGui')
+screenGui.Name = 'ThanServerUI'
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = playerGui
+ProtectGui(screenGui)
+
+-- // UI BUTTON UTAMA //
+local mainButton = Instance.new('TextButton')
+mainButton.Name = 'ThanServerButton'
+mainButton.Size = isMobile and UDim2.new(0, 50, 0, 20) or UDim2.new(0, 90, 0, 30)
+mainButton.Position = UDim2.new(0.5, isMobile and -35 or -45, 0, 6)
+mainButton.BackgroundColor3 = Color3.fromRGB(30, 19, 50)
+mainButton.BorderSizePixel = 0
+mainButton.Font = Enum.Font.GothamBold
+mainButton.Text = 'Than-Hub SERVER'
+mainButton.TextColor3 = Color3.fromRGB(220, 200, 255)
+mainButton.TextSize = isMobile and 9 or 11
+mainButton.AutoButtonColor = false
+mainButton.Parent = screenGui
+
+local mbCorner = Instance.new('UICorner')
+mbCorner.CornerRadius = UDim.new(0.5, 0)
+mbCorner.Parent = mainButton
+
+local mbStroke = Instance.new('UIStroke')
+mbStroke.Thickness = 1
+mbStroke.Color = Color3.fromRGB(140, 60, 220)
+mbStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+mbStroke.Transparency = 0.3
+mbStroke.Parent = mainButton
+
+-- // UI FRAME SERVER LIST //
+local frameWidth = isMobile and math.min(screenSize.X * 0.95, 380) or 520
+local frameHeight = isMobile and math.min(screenSize.Y * 0.7, 400) or 270
+
+local serverFrame = Instance.new('Frame')
+serverFrame.Size = UDim2.new(0, frameWidth, 0, frameHeight)
+serverFrame.AnchorPoint = Vector2.new(0.5, 0)
+serverFrame.Position = UDim2.new(0.5, 0, 0, isMobile and 35 or 45)
+serverFrame.BackgroundColor3 = Color3.fromRGB(15, 10, 25)
+serverFrame.BackgroundTransparency = 0.05
+serverFrame.BorderSizePixel = 0
+serverFrame.Visible = false
+serverFrame.Parent = screenGui
+
+local frameCorner = Instance.new('UICorner')
+frameCorner.CornerRadius = UDim.new(0, isMobile and 15 or 20)
+frameCorner.Parent = serverFrame
+
+local frameStroke = Instance.new('UIStroke')
+frameStroke.Thickness = 1.5
+frameStroke.Color = Color3.fromRGB(120, 60, 210)
+frameStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+frameStroke.Transparency = 0.25
+frameStroke.Parent = serverFrame
+
+local frameGradient = Instance.new('UIGradient')
+frameGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 50, 160)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(150, 90, 230)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(90, 50, 160)),
+})
+frameGradient.Parent = frameStroke
+
+local searchBar = Instance.new('TextBox')
+searchBar.Size = isMobile and UDim2.new(1, -110, 0, 30) or UDim2.new(1, -130, 0, 34)
+searchBar.Position = UDim2.new(0, isMobile and 10 or 18, 0, isMobile and 10 or 18)
+searchBar.BackgroundColor3 = Color3.fromRGB(28, 22, 38)
+searchBar.Font = Enum.Font.GothamMedium
+searchBar.PlaceholderText = 'Search server...'
+searchBar.PlaceholderColor3 = Color3.fromRGB(160, 140, 200)
+searchBar.Text = ''
+searchBar.TextColor3 = Color3.fromRGB(235, 230, 255)
+searchBar.TextSize = isMobile and 11 or 13
+searchBar.TextXAlignment = Enum.TextXAlignment.Left
+searchBar.Parent = serverFrame
+Instance.new('UICorner', searchBar).CornerRadius = UDim.new(0, 8)
+local sbPad = Instance.new('UIPadding', searchBar)
+sbPad.PaddingLeft = UDim.new(0, 12)
+
+local refreshButton = Instance.new('TextButton')
+refreshButton.Size = isMobile and UDim2.new(0, 65, 0, 30) or UDim2.new(0, 80, 0, 34)
+refreshButton.Position = isMobile and UDim2.new(1, -75, 0, 10) or UDim2.new(1, -95, 0, 18)
+refreshButton.BackgroundColor3 = Color3.fromRGB(80, 40, 140)
+refreshButton.Font = Enum.Font.GothamBold
+refreshButton.Text = 'Refresh'
+refreshButton.TextColor3 = Color3.fromRGB(240, 230, 255)
+refreshButton.TextSize = isMobile and 12 or 13
+refreshButton.Parent = serverFrame
+Instance.new('UICorner', refreshButton).CornerRadius = UDim.new(0, 8)
+
+local scrollFrame = Instance.new('ScrollingFrame')
+scrollFrame.Size = isMobile and UDim2.new(1, -20, 1, -55) or UDim2.new(1, -36, 1, -75)
+scrollFrame.Position = isMobile and UDim2.new(0, 10, 0, 50) or UDim2.new(0, 18, 0, 65)
+scrollFrame.BackgroundTransparency = 1
+scrollFrame.ScrollBarThickness = 4
+scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(150, 80, 240)
+scrollFrame.Parent = serverFrame
+
+local listLayout = Instance.new('UIListLayout', scrollFrame)
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Padding = UDim.new(0, 10)
+
+-- // LOGIC SYSTEM //
+local servers = {}
+local refreshing = false
+
+local function fetchServers()
+    local success, response = pcall(function()
+        return game:HttpGet(PROXY_URL)
+    end)
+
+    if not success then return false end
+
+    local decodeSuccess, decoded = pcall(function()
+        return HttpService:JSONDecode(response)
+    end)
+
+    if not decodeSuccess or not decoded.data then return false end
+
+    servers = {}
+    for _, data in ipairs(decoded.data) do
+        table.insert(servers, {
+            event = "Public Server", -- Karena API resmi tidak mengirim nama event
+            uptime = "Live",
+            players = data.playing .. "/" .. data.maxPlayers,
+            relic = "N/A",
+            weather = "Normal",
+            jobId = data.id,
+            placeId = game.PlaceId
+        })
+    end
+    return true
+end
+
+local function createServerItem(data)
+    local item = Instance.new('Frame')
+    item.Size = UDim2.new(1, 0, 0, isMobile and 95 or 80)
+    item.BackgroundColor3 = Color3.fromRGB(28, 22, 38)
+    
+    local corner = Instance.new('UICorner', item)
+    corner.CornerRadius = UDim.new(0, 12)
+
+    local title = Instance.new('TextLabel', item)
+    title.Size = UDim2.new(0.7, 0, 0, 30)
+    title.Position = UDim2.new(0, 14, 0, 8)
+    title.BackgroundTransparency = 1
+    title.Font = Enum.Font.GothamBold
+    title.Text = "Players: " .. data.players
+    title.TextColor3 = Color3.fromRGB(180, 160, 250)
+    title.TextSize = 13
+    title.TextXAlignment = "Left"
+
+    local info = Instance.new('TextLabel', item)
+    info.Size = UDim2.new(0.7, 0, 0, 20)
+    info.Position = UDim2.new(0, 14, 0, 38)
+    info.BackgroundTransparency = 1
+    info.Font = Enum.Font.Gotham
+    info.Text = "Status: " .. data.uptime .. " | Weather: " .. data.weather
+    info.TextColor3 = Color3.fromRGB(210, 200, 235)
+    info.TextSize = 11
+    info.TextXAlignment = "Left"
+
+    local join = Instance.new('TextButton', item)
+    join.Size = UDim2.new(0, 80, 0, 30)
+    join.Position = UDim2.new(1, -95, 0.5, -15)
+    join.BackgroundColor3 = Color3.fromRGB(100, 50, 180)
+    join.Text = "JOIN"
+    join.Font = Enum.Font.GothamBold
+    join.TextColor3 = Color3.new(1,1,1)
+    Instance.new('UICorner', join).CornerRadius = UDim.new(0, 8)
+
+    join.MouseButton1Click:Connect(function()
+        game:GetService("TeleportService"):TeleportToPlaceInstance(data.placeId, data.jobId, player)
+    end)
+
+    return item
+end
+
+local function populate(filter)
+    for _, c in ipairs(scrollFrame:GetChildren()) do
+        if c:IsA('Frame') then c:Destroy() end
+    end
+
+    for _, s in ipairs(servers) do
+        createServerItem(s).Parent = scrollFrame
+    end
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10)
+end
+
+-- // EVENT HANDLERS //
+mainButton.MouseButton1Click:Connect(function()
+    serverFrame.Visible = not serverFrame.Visible
+end)
+
+refreshButton.MouseButton1Click:Connect(function()
+    if refreshing then return end
+    refreshing = true
+    refreshButton.Text = "..."
+    if fetchServers() then
+        populate()
+    end
+    refreshButton.Text = "Refresh"
+    refreshing = false
+end)
+
+-- Auto Load
+task.spawn(function()
+    fetchServers()
+    populate()
+end)
+
+-- Animation Gradient
+task.spawn(function()
+    while true do
+        for i = 0, 1, 0.01 do
+            frameGradient.Offset = Vector2.new(i, 0)
+            task.wait(0.03)
+        end
+    end
+end)
