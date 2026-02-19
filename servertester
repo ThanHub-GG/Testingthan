@@ -1,236 +1,275 @@
 local Players = game:GetService('Players')
-local TweenService = game:GetService('TweenService')
 local HttpService = game:GetService('HttpService')
-local UserInputService = game:GetService('UserInputService')
+local TeleportService = game:GetService('TeleportService')
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild('PlayerGui')
 
--- Menggunakan RoProxy karena API asli mati dan Roblox memblokir direct request ke domain sendiri
-local PROXY_URL = 'https://games.roproxy.com/v1/games/' .. game.PlaceId .. '/servers/Public?sortOrder=Desc&limit=50'
+-- // 1. KONFIGURASI SUPABASE //
+local SB_URL = "https://jmfniwyhitvvqhxcqqot.supabase.co"
+local SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptZm5pd3loaXR2dnFoeGNxcW90Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1MDM1MjEsImV4cCI6MjA4NzA3OTUyMX0.CMXMBQvc-f-x9YeA1JXVQa90s2QX1SQS_B1UKVEHhoA"
 
-local isMobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
-local screenSize = workspace.CurrentCamera.ViewportSize
-
+local request = (syn and syn.request) or (http and http.request) or request
 local ProtectGui = protectgui or (syn and syn.protect_gui) or function() end
-local screenGui = Instance.new('ScreenGui')
-screenGui.Name = 'ThanServerUI'
-screenGui.ResetOnSpawn = false
-screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-screenGui.Parent = playerGui
-ProtectGui(screenGui)
 
--- // UI BUTTON UTAMA //
-local mainButton = Instance.new('TextButton')
-mainButton.Name = 'ThanServerButton'
-mainButton.Size = isMobile and UDim2.new(0, 50, 0, 20) or UDim2.new(0, 90, 0, 30)
-mainButton.Position = UDim2.new(0.5, isMobile and -35 or -45, 0, 6)
-mainButton.BackgroundColor3 = Color3.fromRGB(30, 19, 50)
-mainButton.BorderSizePixel = 0
-mainButton.Font = Enum.Font.GothamBold
-mainButton.Text = 'Than-Hub SERVER'
-mainButton.TextColor3 = Color3.fromRGB(220, 200, 255)
-mainButton.TextSize = isMobile and 9 or 11
-mainButton.AutoButtonColor = false
-mainButton.Parent = screenGui
+-- // DAFTAR TARGET //
+local TARGET_LIST = {"Orca", "Moby", "Bloop Fish", "Whale", "Megalodon", "Shark", "Serpent", "Isonade", "Scylla", "Blarney", "Leviathan", "Kraken", "Blue Moon", "Mosslurker", "Narwhal", "Dragon", "Frightful", "Mossjaw", "Tidefall"}
 
-local mbCorner = Instance.new('UICorner')
-mbCorner.CornerRadius = UDim.new(0.5, 0)
-mbCorner.Parent = mainButton
-
-local mbStroke = Instance.new('UIStroke')
-mbStroke.Thickness = 1
-mbStroke.Color = Color3.fromRGB(140, 60, 220)
-mbStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-mbStroke.Transparency = 0.3
-mbStroke.Parent = mainButton
-
--- // UI FRAME SERVER LIST //
-local frameWidth = isMobile and math.min(screenSize.X * 0.95, 380) or 520
-local frameHeight = isMobile and math.min(screenSize.Y * 0.7, 400) or 270
-
-local serverFrame = Instance.new('Frame')
-serverFrame.Size = UDim2.new(0, frameWidth, 0, frameHeight)
-serverFrame.AnchorPoint = Vector2.new(0.5, 0)
-serverFrame.Position = UDim2.new(0.5, 0, 0, isMobile and 35 or 45)
-serverFrame.BackgroundColor3 = Color3.fromRGB(15, 10, 25)
-serverFrame.BackgroundTransparency = 0.05
-serverFrame.BorderSizePixel = 0
-serverFrame.Visible = false
-serverFrame.Parent = screenGui
-
-local frameCorner = Instance.new('UICorner')
-frameCorner.CornerRadius = UDim.new(0, isMobile and 15 or 20)
-frameCorner.Parent = serverFrame
-
-local frameStroke = Instance.new('UIStroke')
-frameStroke.Thickness = 1.5
-frameStroke.Color = Color3.fromRGB(120, 60, 210)
-frameStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-frameStroke.Transparency = 0.25
-frameStroke.Parent = serverFrame
-
-local frameGradient = Instance.new('UIGradient')
-frameGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 50, 160)),
-    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(150, 90, 230)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(90, 50, 160)),
-})
-frameGradient.Parent = frameStroke
-
-local searchBar = Instance.new('TextBox')
-searchBar.Size = isMobile and UDim2.new(1, -110, 0, 30) or UDim2.new(1, -130, 0, 34)
-searchBar.Position = UDim2.new(0, isMobile and 10 or 18, 0, isMobile and 10 or 18)
-searchBar.BackgroundColor3 = Color3.fromRGB(28, 22, 38)
-searchBar.Font = Enum.Font.GothamMedium
-searchBar.PlaceholderText = 'Search server...'
-searchBar.PlaceholderColor3 = Color3.fromRGB(160, 140, 200)
-searchBar.Text = ''
-searchBar.TextColor3 = Color3.fromRGB(235, 230, 255)
-searchBar.TextSize = isMobile and 11 or 13
-searchBar.TextXAlignment = Enum.TextXAlignment.Left
-searchBar.Parent = serverFrame
-Instance.new('UICorner', searchBar).CornerRadius = UDim.new(0, 8)
-local sbPad = Instance.new('UIPadding', searchBar)
-sbPad.PaddingLeft = UDim.new(0, 12)
-
-local refreshButton = Instance.new('TextButton')
-refreshButton.Size = isMobile and UDim2.new(0, 65, 0, 30) or UDim2.new(0, 80, 0, 34)
-refreshButton.Position = isMobile and UDim2.new(1, -75, 0, 10) or UDim2.new(1, -95, 0, 18)
-refreshButton.BackgroundColor3 = Color3.fromRGB(80, 40, 140)
-refreshButton.Font = Enum.Font.GothamBold
-refreshButton.Text = 'Refresh'
-refreshButton.TextColor3 = Color3.fromRGB(240, 230, 255)
-refreshButton.TextSize = isMobile and 12 or 13
-refreshButton.Parent = serverFrame
-Instance.new('UICorner', refreshButton).CornerRadius = UDim.new(0, 8)
-
-local scrollFrame = Instance.new('ScrollingFrame')
-scrollFrame.Size = isMobile and UDim2.new(1, -20, 1, -55) or UDim2.new(1, -36, 1, -75)
-scrollFrame.Position = isMobile and UDim2.new(0, 10, 0, 50) or UDim2.new(0, 18, 0, 65)
-scrollFrame.BackgroundTransparency = 1
-scrollFrame.ScrollBarThickness = 4
-scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(150, 80, 240)
-scrollFrame.Parent = serverFrame
-
-local listLayout = Instance.new('UIListLayout', scrollFrame)
-listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-listLayout.Padding = UDim.new(0, 10)
-
--- // LOGIC SYSTEM //
-local servers = {}
-local refreshing = false
-
-local function fetchServers()
-    local success, response = pcall(function()
-        return game:HttpGet(PROXY_URL)
+-- // UTILITY FUNCTIONS (DETEKSI & DB) //
+local function getDetailedServerInfo()
+    local info = { event = "No Events", weather = "Clear" }
+    pcall(function()
+        local detected = {}
+        local fishingZone = workspace:FindFirstChild("zones") and workspace.zones:FindFirstChild("fishing")
+        if fishingZone then
+            for _, obj in ipairs(fishingZone:GetDescendants()) do
+                if obj:IsA("BasePart") or obj:IsA("Model") then
+                    local name = obj.Name:lower()
+                    for _, target in ipairs(TARGET_LIST) do
+                        if name:find(target:lower()) then
+                            if not table.find(detected, target) then table.insert(detected, target) end
+                        end
+                    end
+                end
+            end
+        end
+        if #detected > 0 then info.event = table.concat(detected, ", ") 
+        elseif workspace:FindFirstChild("Meteor") then info.event = "Meteor"
+        elseif workspace:FindFirstChild("Whale") then info.event = "Whale" end
+        local ws = workspace:FindFirstChild("WorldStatus") or workspace:FindFirstChild("Cycle")
+        if ws and ws:FindFirstChild("Weather") then info.weather = ws.Weather.Value end
     end)
-
-    if not success then return false end
-
-    local decodeSuccess, decoded = pcall(function()
-        return HttpService:JSONDecode(response)
-    end)
-
-    if not decodeSuccess or not decoded.data then return false end
-
-    servers = {}
-    for _, data in ipairs(decoded.data) do
-        table.insert(servers, {
-            event = "Public Server", -- Karena API resmi tidak mengirim nama event
-            uptime = "Live",
-            players = data.playing .. "/" .. data.maxPlayers,
-            relic = "N/A",
-            weather = "Normal",
-            jobId = data.id,
-            placeId = game.PlaceId
-        })
-    end
-    return true
+    return info
 end
 
+-- // VARIABEL CACHE UNTUK MENGHINDARI DOUBLE POST //
+local lastPostedData = {
+    event = "",
+    players = ""
+}
+
+local function postToServerDB()
+    local details = getDetailedServerInfo()
+    local currentEvent = details.event
+    if details.weather ~= "Clear" then 
+        currentEvent = currentEvent .. " (" .. details.weather .. ")" 
+    end
+    
+    local currentPlayers = #Players:GetPlayers() .. "/" .. Players.MaxPlayers
+    
+    -- // VALIDASI: CEK APAKAH ADA PERUBAHAN? //
+    -- Jika event sama DAN jumlah player sama, maka STOP (ga usah post)
+    if lastPostedData.event == currentEvent and lastPostedData.players == currentPlayers then
+        print("[SKIP] Tidak ada perubahan data, membatalkan Post.")
+        return 
+    end
+
+    local payload = {
+        ["jobId"] = tostring(game.JobId),
+        ["players"] = currentPlayers,
+        ["event"] = currentEvent,
+        ["lastUpdated"] = os.time()
+    }
+
+    local success, err = pcall(function()
+        local res = request({
+            Url = SB_URL .. "/rest/v1/Servers",
+            Method = "POST",
+            Headers = {
+                ["apikey"] = SB_KEY,
+                ["Authorization"] = "Bearer " .. SB_KEY,
+                ["Content-Type"] = "application/json",
+                ["Prefer"] = "resolution=merge-duplicates" -- Update jika jobId sama
+            },
+            Body = HttpService:JSONEncode(payload)
+        })
+        
+        -- Jika berhasil post, update cache lokal
+        if res and (res.StatusCode == 200 or res.StatusCode == 201) then
+            lastPostedData.event = currentEvent
+            lastPostedData.players = currentPlayers
+            -- print("[SUCCESS] Data berubah! Berhasil update database.")
+        end
+    end)
+    
+    if not success then
+        warn("[ERROR] Gagal mengirim data ke Supabase: " .. tostring(err))
+    end
+end
+local function fetchServersDB()
+    local success, response = pcall(function()
+        return request({
+            Url = SB_URL .. "/rest/v1/Servers?select=*&order=lastUpdated.desc",
+            Method = "GET",
+            Headers = { ["apikey"] = SB_KEY, ["Authorization"] = "Bearer " .. SB_KEY }
+        })
+    end)
+    return (success and response.StatusCode == 200) and HttpService:JSONDecode(response.Body) or {}
+end
+
+-- // UI DESIGN SETUP //
+local screenGui = Instance.new('ScreenGui', playerGui)
+screenGui.Name = "ThanHub_Redesign"
+screenGui.ResetOnSpawn = false
+ProtectGui(screenGui)
+
+-- Tombol Buka (Main Button)
+local mainButton = Instance.new('TextButton', screenGui)
+mainButton.Size = UDim2.new(0, 140, 0, 35)
+mainButton.Position = UDim2.new(0.5, -70, 0, 20)
+mainButton.BackgroundColor3 = Color3.fromRGB(20, 18, 28)
+mainButton.Text = "🌐 SERVER HUB"
+mainButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+mainButton.Font = Enum.Font.GothamBold
+mainButton.TextSize = 13
+local bCorner = Instance.new("UICorner", mainButton)
+bCorner.CornerRadius = UDim.new(0, 8)
+local bStroke = Instance.new("UIStroke", mainButton)
+bStroke.Color = Color3.fromRGB(120, 80, 255)
+bStroke.Thickness = 1.5
+
+-- Main Frame
+local serverFrame = Instance.new('Frame', screenGui)
+serverFrame.Size = UDim2.new(0, 500, 0, 380)
+serverFrame.Position = UDim2.new(0.5, -250, 0.5, -190)
+serverFrame.BackgroundColor3 = Color3.fromRGB(12, 11, 18)
+serverFrame.Visible = false
+Instance.new("UICorner", serverFrame).CornerRadius = UDim.new(0, 10)
+local fStroke = Instance.new("UIStroke", serverFrame)
+fStroke.Color = Color3.fromRGB(40, 38, 55)
+fStroke.Thickness = 2
+
+-- Header Title
+local headerTitle = Instance.new("TextLabel", serverFrame)
+headerTitle.Size = UDim2.new(1, 0, 0, 40)
+headerTitle.BackgroundTransparency = 1
+headerTitle.Text = "SERVER BROWSER"
+headerTitle.TextColor3 = Color3.fromRGB(160, 140, 255)
+headerTitle.Font = Enum.Font.GothamBold
+headerTitle.TextSize = 16
+
+-- Search Bar Container
+local searchContainer = Instance.new("Frame", serverFrame)
+searchContainer.Size = UDim2.new(1, -30, 0, 35)
+searchContainer.Position = UDim2.new(0, 15, 0, 50)
+searchContainer.BackgroundColor3 = Color3.fromRGB(20, 19, 30)
+Instance.new("UICorner", searchContainer).CornerRadius = UDim.new(0, 6)
+
+local searchBar = Instance.new('TextBox', searchContainer)
+searchBar.Size = UDim2.new(1, -90, 1, 0)
+searchBar.Position = UDim2.new(0, 10, 0, 0)
+searchBar.BackgroundTransparency = 1
+searchBar.PlaceholderText = "Search active events..."
+searchBar.Text = ""
+searchBar.TextColor3 = Color3.new(1,1,1)
+searchBar.Font = Enum.Font.Gotham
+searchBar.TextXAlignment = "Left"
+
+local refreshBtn = Instance.new('TextButton', searchContainer)
+refreshBtn.Size = UDim2.new(0, 70, 0, 25)
+refreshBtn.Position = UDim2.new(1, -75, 0.5, -12)
+refreshBtn.BackgroundColor3 = Color3.fromRGB(120, 80, 255)
+refreshBtn.Text = "Refresh"
+refreshBtn.TextColor3 = Color3.new(1,1,1)
+refreshBtn.Font = Enum.Font.GothamBold
+refreshBtn.TextSize = 11
+Instance.new("UICorner", refreshBtn).CornerRadius = UDim.new(0, 4)
+
+-- Scrolling List
+local scrollFrame = Instance.new('ScrollingFrame', serverFrame)
+scrollFrame.Size = UDim2.new(1, -20, 1, -110)
+scrollFrame.Position = UDim2.new(0, 10, 0, 100)
+scrollFrame.BackgroundTransparency = 1
+scrollFrame.ScrollBarThickness = 2
+scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(120, 80, 255)
+local layout = Instance.new("UIListLayout", scrollFrame)
+layout.Padding = UDim.new(0, 8)
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+-- // LIST ITEM POPULATION //
 local function createServerItem(data)
     local item = Instance.new('Frame')
-    item.Size = UDim2.new(1, 0, 0, isMobile and 95 or 80)
-    item.BackgroundColor3 = Color3.fromRGB(28, 22, 38)
+    item.Size = UDim2.new(1, -10, 0, 70)
+    item.BackgroundColor3 = Color3.fromRGB(18, 17, 26)
+    Instance.new('UICorner', item).CornerRadius = UDim.new(0, 6)
+    local iStroke = Instance.new("UIStroke", item)
+    iStroke.Color = Color3.fromRGB(35, 33, 45)
+    iStroke.Thickness = 1
     
-    local corner = Instance.new('UICorner', item)
-    corner.CornerRadius = UDim.new(0, 12)
+    local eventLabel = Instance.new('TextLabel', item)
+    eventLabel.Size = UDim2.new(0.65, 0, 0, 30)
+    eventLabel.Position = UDim2.new(0, 12, 0, 8)
+    eventLabel.BackgroundTransparency = 1
+    eventLabel.Font = Enum.Font.GothamBold
+    eventLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    eventLabel.TextSize = 14
+    eventLabel.TextXAlignment = "Left"
+    eventLabel.Text = tostring(data.event or "Unknown")
 
-    local title = Instance.new('TextLabel', item)
-    title.Size = UDim2.new(0.7, 0, 0, 30)
-    title.Position = UDim2.new(0, 14, 0, 8)
-    title.BackgroundTransparency = 1
-    title.Font = Enum.Font.GothamBold
-    title.Text = "Players: " .. data.players
-    title.TextColor3 = Color3.fromRGB(180, 160, 250)
-    title.TextSize = 13
-    title.TextXAlignment = "Left"
-
-    local info = Instance.new('TextLabel', item)
-    info.Size = UDim2.new(0.7, 0, 0, 20)
-    info.Position = UDim2.new(0, 14, 0, 38)
-    info.BackgroundTransparency = 1
-    info.Font = Enum.Font.Gotham
-    info.Text = "Status: " .. data.uptime .. " | Weather: " .. data.weather
-    info.TextColor3 = Color3.fromRGB(210, 200, 235)
-    info.TextSize = 11
-    info.TextXAlignment = "Left"
+    local statusLabel = Instance.new('TextLabel', item)
+    statusLabel.Size = UDim2.new(0.65, 0, 0, 20)
+    statusLabel.Position = UDim2.new(0, 12, 0, 38)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.Font = Enum.Font.Gotham
+    statusLabel.TextColor3 = Color3.fromRGB(140, 140, 150)
+    statusLabel.TextSize = 11
+    statusLabel.TextXAlignment = "Left"
+    local timeStr = os.date("%H:%M", data.lastUpdated or 0)
+    statusLabel.Text = "👤 " .. tostring(data.players or "0/0") .. "  •  🕒 " .. timeStr
 
     local join = Instance.new('TextButton', item)
     join.Size = UDim2.new(0, 80, 0, 30)
-    join.Position = UDim2.new(1, -95, 0.5, -15)
-    join.BackgroundColor3 = Color3.fromRGB(100, 50, 180)
+    join.Position = UDim2.new(1, -92, 0.5, -15)
+    join.BackgroundColor3 = Color3.fromRGB(30, 28, 45)
     join.Text = "JOIN"
+    join.TextColor3 = Color3.fromRGB(160, 140, 255)
     join.Font = Enum.Font.GothamBold
-    join.TextColor3 = Color3.new(1,1,1)
-    Instance.new('UICorner', join).CornerRadius = UDim.new(0, 8)
+    join.TextSize = 12
+    Instance.new('UICorner', join).CornerRadius = UDim.new(0, 5)
+    local jStroke = Instance.new("UIStroke", join)
+    jStroke.Color = Color3.fromRGB(120, 80, 255)
+    jStroke.Thickness = 1
 
-    join.MouseButton1Click:Connect(function()
-        game:GetService("TeleportService"):TeleportToPlaceInstance(data.placeId, data.jobId, player)
+    -- Hover Effect
+    join.MouseEnter:Connect(function()
+        join.BackgroundColor3 = Color3.fromRGB(120, 80, 255)
+        join.TextColor3 = Color3.new(1,1,1)
+    end)
+    join.MouseLeave:Connect(function()
+        join.BackgroundColor3 = Color3.fromRGB(30, 28, 45)
+        join.TextColor3 = Color3.fromRGB(160, 140, 255)
     end)
 
+    join.MouseButton1Click:Connect(function()
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, data.jobId, player)
+    end)
     return item
 end
 
 local function populate(filter)
-    for _, c in ipairs(scrollFrame:GetChildren()) do
-        if c:IsA('Frame') then c:Destroy() end
-    end
-
-    for _, s in ipairs(servers) do
-        createServerItem(s).Parent = scrollFrame
-    end
-    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10)
-end
-
--- // EVENT HANDLERS //
-mainButton.MouseButton1Click:Connect(function()
-    serverFrame.Visible = not serverFrame.Visible
-end)
-
-refreshButton.MouseButton1Click:Connect(function()
-    if refreshing then return end
-    refreshing = true
-    refreshButton.Text = "..."
-    if fetchServers() then
-        populate()
-    end
-    refreshButton.Text = "Refresh"
-    refreshing = false
-end)
-
--- Auto Load
-task.spawn(function()
-    fetchServers()
-    populate()
-end)
-
--- Animation Gradient
-task.spawn(function()
-    while true do
-        for i = 0, 1, 0.01 do
-            frameGradient.Offset = Vector2.new(i, 0)
-            task.wait(0.03)
+    for _, v in pairs(scrollFrame:GetChildren()) do if v:IsA("Frame") then v:Destroy() end end
+    local allData = fetchServersDB()
+    for _, s in pairs(allData) do
+        if filter == "" or tostring(s.event):lower():find(filter:lower()) then
+            createServerItem(s).Parent = scrollFrame
         end
     end
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
+end
+
+-- // INITIALIZE //
+task.spawn(function()
+    while true do
+        postToServerDB()
+        task.wait(60)
+    end
 end)
+
+mainButton.MouseButton1Click:Connect(function()
+    serverFrame.Visible = not serverFrame.Visible
+    if serverFrame.Visible then populate(searchBar.Text) end
+end)
+
+refreshBtn.MouseButton1Click:Connect(function() populate(searchBar.Text) end)
+searchBar:GetPropertyChangedSignal("Text"):Connect(function() populate(searchBar.Text) end)
+
+populate("")
