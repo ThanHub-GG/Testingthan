@@ -1,6 +1,7 @@
 local Players = game:GetService('Players')
 local HttpService = game:GetService('HttpService')
 local TeleportService = game:GetService('TeleportService')
+local TweenService = game:GetService('TweenService')
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild('PlayerGui')
 
@@ -11,10 +12,12 @@ local SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 local request = (syn and syn.request) or (http and http.request) or request
 local ProtectGui = protectgui or (syn and syn.protect_gui) or function() end
 
--- // DAFTAR TARGET //
+-- // DAFTAR TARGET UNTUK SCANNER //
 local TARGET_LIST = {"Orca", "Moby", "Bloop Fish", "Whale", "Megalodon", "Shark", "Serpent", "Isonade", "Scylla", "Blarney", "Leviathan", "Kraken", "Blue Moon", "Mosslurker", "Narwhal", "Dragon", "Frightful", "Mossjaw", "Tidefall"}
 
--- // UTILITY FUNCTIONS (DETEKSI & DB) //
+-- // UTILITY FUNCTIONS //
+local lastPostedData = { event = "", players = "" }
+
 local function getDetailedServerInfo()
     local info = { event = "No Events", weather = "Clear" }
     pcall(function()
@@ -41,64 +44,59 @@ local function getDetailedServerInfo()
     return info
 end
 
--- // VARIABEL CACHE UNTUK MENGHINDARI DOUBLE POST //
-local lastPostedData = {
-    event = "",
-    players = ""
-}
-
 local function postToServerDB()
     local details = getDetailedServerInfo()
     local currentEvent = details.event
+    
+    -- Tambahkan info weather ke event string jika bukan Clear
     if details.weather ~= "Clear" then 
         currentEvent = currentEvent .. " (" .. details.weather .. ")" 
     end
     
     local currentPlayers = #Players:GetPlayers() .. "/" .. Players.MaxPlayers
-    
-    -- // VALIDASI: CEK APAKAH ADA PERUBAHAN? //
-    -- Jika event sama DAN jumlah player sama, maka STOP (ga usah post)
-    if lastPostedData.event == currentEvent and lastPostedData.players == currentPlayers then
-        print("[SKIP] Tidak ada perubahan data, membatalkan Post.")
+    local currentJobId = tostring(game.JobId)
+
+    -- // VALIDASI: HANYA POST JIKA EVENT BERUBAH //
+    -- Kita abaikan 'players' di sini supaya tidak spam update cuma gara-gara player keluar/masuk
+    if lastPostedData.event == currentEvent then 
         return 
     end
 
+    -- // PAYLOAD //
     local payload = {
-        ["jobId"] = tostring(game.JobId),
-        ["players"] = currentPlayers,
+        ["jobId"] = currentJobId,
+        ["players"] = currentPlayers, -- Player tetap dikirim tapi bukan sebagai pemicu (trigger)
         ["event"] = currentEvent,
         ["lastUpdated"] = os.time()
     }
 
-    local success, err = pcall(function()
+    pcall(function()
         local res = request({
-            Url = SB_URL .. "/rest/v1/Servers",
+            Url = SB_URL .. "/rest/v1/ThanHub",
             Method = "POST",
             Headers = {
                 ["apikey"] = SB_KEY,
                 ["Authorization"] = "Bearer " .. SB_KEY,
                 ["Content-Type"] = "application/json",
-                ["Prefer"] = "resolution=merge-duplicates" -- Update jika jobId sama
+                ["Prefer"] = "resolution=merge-duplicates" 
             },
             Body = HttpService:JSONEncode(payload)
         })
         
-        -- Jika berhasil post, update cache lokal
         if res and (res.StatusCode == 200 or res.StatusCode == 201) then
+            print("🚀 [ThanHub] Event Berubah ke: " .. currentEvent .. ". Database Updated!")
+            -- Simpan event terbaru ke cache lokal
             lastPostedData.event = currentEvent
-            lastPostedData.players = currentPlayers
-            -- print("[SUCCESS] Data berubah! Berhasil update database.")
+        else
+            warn("[ThanHub] Gagal Update Event: " .. (res and res.Body or "No Response"))
         end
     end)
-    
-    if not success then
-        warn("[ERROR] Gagal mengirim data ke Supabase: " .. tostring(err))
-    end
 end
+
 local function fetchServersDB()
     local success, response = pcall(function()
         return request({
-            Url = SB_URL .. "/rest/v1/Servers?select=*&order=lastUpdated.desc",
+            Url = SB_URL .. "/rest/v1/ThanHub?select=*&order=lastUpdated.desc",
             Method = "GET",
             Headers = { ["apikey"] = SB_KEY, ["Authorization"] = "Bearer " .. SB_KEY }
         })
@@ -106,142 +104,157 @@ local function fetchServersDB()
     return (success and response.StatusCode == 200) and HttpService:JSONDecode(response.Body) or {}
 end
 
--- // UI DESIGN SETUP //
+-- // UI SETUP (NEON THEME) //
+local NeonPurple = Color3.fromRGB(160, 80, 255)
+local NeonBlue = Color3.fromRGB(0, 220, 255)
+local DarkBg = Color3.fromRGB(10, 10, 15)
+
 local screenGui = Instance.new('ScreenGui', playerGui)
-screenGui.Name = "ThanHub_Redesign"
+screenGui.Name = "ThanHub_Supabase"
 screenGui.ResetOnSpawn = false
 ProtectGui(screenGui)
 
--- Tombol Buka (Main Button)
+-- Main Button
 local mainButton = Instance.new('TextButton', screenGui)
 mainButton.Size = UDim2.new(0, 140, 0, 35)
 mainButton.Position = UDim2.new(0.5, -70, 0, 20)
-mainButton.BackgroundColor3 = Color3.fromRGB(20, 18, 28)
-mainButton.Text = "🌐 SERVER HUB"
-mainButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+mainButton.BackgroundColor3 = DarkBg
+mainButton.Text = "🌐 THAN HUB"
+mainButton.TextColor3 = NeonBlue
 mainButton.Font = Enum.Font.GothamBold
-mainButton.TextSize = 13
-local bCorner = Instance.new("UICorner", mainButton)
-bCorner.CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", mainButton).CornerRadius = UDim.new(0, 8)
 local bStroke = Instance.new("UIStroke", mainButton)
-bStroke.Color = Color3.fromRGB(120, 80, 255)
-bStroke.Thickness = 1.5
+bStroke.Color = NeonPurple
+bStroke.Thickness = 2
 
 -- Main Frame
 local serverFrame = Instance.new('Frame', screenGui)
-serverFrame.Size = UDim2.new(0, 500, 0, 380)
-serverFrame.Position = UDim2.new(0.5, -250, 0.5, -190)
-serverFrame.BackgroundColor3 = Color3.fromRGB(12, 11, 18)
+serverFrame.Size = UDim2.new(0, 500, 0, 400)
+serverFrame.Position = UDim2.new(0.5, -250, 0.5, -200)
+serverFrame.BackgroundColor3 = DarkBg
 serverFrame.Visible = false
 Instance.new("UICorner", serverFrame).CornerRadius = UDim.new(0, 10)
 local fStroke = Instance.new("UIStroke", serverFrame)
-fStroke.Color = Color3.fromRGB(40, 38, 55)
+fStroke.Color = NeonPurple
 fStroke.Thickness = 2
 
--- Header Title
+-- Title
 local headerTitle = Instance.new("TextLabel", serverFrame)
-headerTitle.Size = UDim2.new(1, 0, 0, 40)
+headerTitle.Size = UDim2.new(1, 0, 0, 45)
 headerTitle.BackgroundTransparency = 1
 headerTitle.Text = "SERVER BROWSER"
-headerTitle.TextColor3 = Color3.fromRGB(160, 140, 255)
+headerTitle.TextColor3 = NeonPurple
 headerTitle.Font = Enum.Font.GothamBold
-headerTitle.TextSize = 16
+headerTitle.TextSize = 18
 
--- Search Bar Container
+-- Search
 local searchContainer = Instance.new("Frame", serverFrame)
-searchContainer.Size = UDim2.new(1, -30, 0, 35)
-searchContainer.Position = UDim2.new(0, 15, 0, 50)
-searchContainer.BackgroundColor3 = Color3.fromRGB(20, 19, 30)
-Instance.new("UICorner", searchContainer).CornerRadius = UDim.new(0, 6)
+searchContainer.Size = UDim2.new(1, -40, 0, 35)
+searchContainer.Position = UDim2.new(0, 20, 0, 55)
+searchContainer.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+Instance.new("UICorner", searchContainer)
+local sStroke = Instance.new("UIStroke", searchContainer)
+sStroke.Color = NeonBlue
+sStroke.Thickness = 1
 
 local searchBar = Instance.new('TextBox', searchContainer)
 searchBar.Size = UDim2.new(1, -90, 1, 0)
-searchBar.Position = UDim2.new(0, 10, 0, 0)
+searchBar.Position = UDim2.new(0, 12, 0, 0)
 searchBar.BackgroundTransparency = 1
-searchBar.PlaceholderText = "Search active events..."
+searchBar.PlaceholderText = "Search Event (Megalodon, Whale...)"
 searchBar.Text = ""
 searchBar.TextColor3 = Color3.new(1,1,1)
 searchBar.Font = Enum.Font.Gotham
 searchBar.TextXAlignment = "Left"
 
 local refreshBtn = Instance.new('TextButton', searchContainer)
-refreshBtn.Size = UDim2.new(0, 70, 0, 25)
-refreshBtn.Position = UDim2.new(1, -75, 0.5, -12)
-refreshBtn.BackgroundColor3 = Color3.fromRGB(120, 80, 255)
+refreshBtn.Size = UDim2.new(0, 75, 0, 25)
+refreshBtn.Position = UDim2.new(1, -80, 0.5, -12)
+refreshBtn.BackgroundColor3 = NeonPurple
 refreshBtn.Text = "Refresh"
 refreshBtn.TextColor3 = Color3.new(1,1,1)
 refreshBtn.Font = Enum.Font.GothamBold
 refreshBtn.TextSize = 11
-Instance.new("UICorner", refreshBtn).CornerRadius = UDim.new(0, 4)
+Instance.new("UICorner", refreshBtn)
 
--- Scrolling List
+-- List
 local scrollFrame = Instance.new('ScrollingFrame', serverFrame)
-scrollFrame.Size = UDim2.new(1, -20, 1, -110)
-scrollFrame.Position = UDim2.new(0, 10, 0, 100)
+scrollFrame.Size = UDim2.new(1, -20, 1, -120)
+scrollFrame.Position = UDim2.new(0, 10, 0, 110)
 scrollFrame.BackgroundTransparency = 1
 scrollFrame.ScrollBarThickness = 2
-scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(120, 80, 255)
+scrollFrame.ScrollBarImageColor3 = NeonBlue
 local layout = Instance.new("UIListLayout", scrollFrame)
 layout.Padding = UDim.new(0, 8)
 layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
--- // LIST ITEM POPULATION //
+-- // ITEM GENERATOR //
+-- // ITEM GENERATOR (FIXED OVERFLOW) //
 local function createServerItem(data)
     local item = Instance.new('Frame')
-    item.Size = UDim2.new(1, -10, 0, 70)
-    item.BackgroundColor3 = Color3.fromRGB(18, 17, 26)
-    Instance.new('UICorner', item).CornerRadius = UDim.new(0, 6)
-    local iStroke = Instance.new("UIStroke", item)
-    iStroke.Color = Color3.fromRGB(35, 33, 45)
-    iStroke.Thickness = 1
+    item.Size = UDim2.new(1, -20, 0, 85) -- Ukuran kotak sedikit dipertinggi
+    item.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
+    Instance.new('UICorner', item)
     
+    local iStroke = Instance.new("UIStroke", item)
+    iStroke.Color = NeonBlue
+    iStroke.Transparency = 0.7
+    iStroke.Thickness = 1.2
+    
+    -- Event Label (Rapi & Tidak Out dari Kotak)
     local eventLabel = Instance.new('TextLabel', item)
-    eventLabel.Size = UDim2.new(0.65, 0, 0, 30)
-    eventLabel.Position = UDim2.new(0, 12, 0, 8)
+    eventLabel.Size = UDim2.new(0.65, 0, 0, 45) -- Area teks lebih luas
+    eventLabel.Position = UDim2.new(0, 15, 0, 8)
     eventLabel.BackgroundTransparency = 1
     eventLabel.Font = Enum.Font.GothamBold
-    eventLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    eventLabel.TextColor3 = NeonPurple
     eventLabel.TextSize = 14
     eventLabel.TextXAlignment = "Left"
-    eventLabel.Text = tostring(data.event or "Unknown")
+    eventLabel.TextYAlignment = "Top" -- Mulai dari atas
+    eventLabel.Text = tostring(data.event or "None")
+    eventLabel.TextWrapped = true -- Teks otomatis turun jika kepanjangan
+    eventLabel.TextTruncate = Enum.TextTruncate.AtEnd -- Kasih "..." di ujung jika benar-benar penuh
 
+    -- Status Label (Players & Time)
     local statusLabel = Instance.new('TextLabel', item)
     statusLabel.Size = UDim2.new(0.65, 0, 0, 20)
-    statusLabel.Position = UDim2.new(0, 12, 0, 38)
+    statusLabel.Position = UDim2.new(0, 15, 1, -25) -- Tempel di bawah
     statusLabel.BackgroundTransparency = 1
     statusLabel.Font = Enum.Font.Gotham
-    statusLabel.TextColor3 = Color3.fromRGB(140, 140, 150)
+    statusLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
     statusLabel.TextSize = 11
     statusLabel.TextXAlignment = "Left"
     local timeStr = os.date("%H:%M", data.lastUpdated or 0)
     statusLabel.Text = "👤 " .. tostring(data.players or "0/0") .. "  •  🕒 " .. timeStr
 
+    -- Join Button
     local join = Instance.new('TextButton', item)
-    join.Size = UDim2.new(0, 80, 0, 30)
-    join.Position = UDim2.new(1, -92, 0.5, -15)
-    join.BackgroundColor3 = Color3.fromRGB(30, 28, 45)
+    join.Size = UDim2.new(0, 80, 0, 32)
+    join.Position = UDim2.new(1, -95, 0.5, -16)
+    join.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
     join.Text = "JOIN"
-    join.TextColor3 = Color3.fromRGB(160, 140, 255)
+    join.TextColor3 = NeonBlue
     join.Font = Enum.Font.GothamBold
     join.TextSize = 12
-    Instance.new('UICorner', join).CornerRadius = UDim.new(0, 5)
+    Instance.new('UICorner', join)
+    
     local jStroke = Instance.new("UIStroke", join)
-    jStroke.Color = Color3.fromRGB(120, 80, 255)
+    jStroke.Color = NeonBlue
     jStroke.Thickness = 1
+    jStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 
-    -- Hover Effect
+    -- Hover Effects
     join.MouseEnter:Connect(function()
-        join.BackgroundColor3 = Color3.fromRGB(120, 80, 255)
-        join.TextColor3 = Color3.new(1,1,1)
+        TweenService:Create(join, TweenInfo.new(0.2), {BackgroundColor3 = NeonBlue, TextColor3 = Color3.new(1,1,1)}):Play()
     end)
     join.MouseLeave:Connect(function()
-        join.BackgroundColor3 = Color3.fromRGB(30, 28, 45)
-        join.TextColor3 = Color3.fromRGB(160, 140, 255)
+        TweenService:Create(join, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(10, 10, 15), TextColor3 = NeonBlue}):Play()
     end)
 
     join.MouseButton1Click:Connect(function()
         TeleportService:TeleportToPlaceInstance(game.PlaceId, data.jobId, player)
     end)
+    
     return item
 end
 
@@ -260,13 +273,17 @@ end
 task.spawn(function()
     while true do
         postToServerDB()
-        task.wait(60)
+        task.wait(120)
     end
 end)
 
 mainButton.MouseButton1Click:Connect(function()
     serverFrame.Visible = not serverFrame.Visible
-    if serverFrame.Visible then populate(searchBar.Text) end
+    if serverFrame.Visible then 
+        serverFrame.Size = UDim2.new(0, 0, 0, 0)
+        TweenService:Create(serverFrame, TweenInfo.new(0.4, Enum.EasingStyle.Back), {Size = UDim2.new(0, 500, 0, 400)}):Play()
+        populate(searchBar.Text) 
+    end
 end)
 
 refreshBtn.MouseButton1Click:Connect(function() populate(searchBar.Text) end)
