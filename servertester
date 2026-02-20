@@ -104,7 +104,10 @@ local function fetchServersDB()
     return (success and response.StatusCode == 200) and HttpService:JSONDecode(response.Body) or {}
 end
 
--- // UI SETUP (NEON THEME) //
+-- // TAMBAHKAN DI BAGIAN ATAS UNTUK HANDLE MOBILE //
+local isMobile = (game:GetService("UserInputService").TouchEnabled and not game:GetService("UserInputService").KeyboardEnabled)
+
+-- // UI SETUP (RESPONSIVE NEON THEME) //
 local NeonPurple = Color3.fromRGB(160, 80, 255)
 local NeonBlue = Color3.fromRGB(0, 220, 255)
 local DarkBg = Color3.fromRGB(10, 10, 15)
@@ -112,31 +115,57 @@ local DarkBg = Color3.fromRGB(10, 10, 15)
 local screenGui = Instance.new('ScreenGui', playerGui)
 screenGui.Name = "ThanHub_Supabase"
 screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true -- Supaya tidak terpotong notch HP
 ProtectGui(screenGui)
 
--- Main Button
+-- // MAIN BUTTON (Responsive Position) //
+-- // 1. MODIFIKASI MAIN BUTTON (Tombol Buka Menu) //
 local mainButton = Instance.new('TextButton', screenGui)
-mainButton.Size = UDim2.new(0, 140, 0, 35)
-mainButton.Position = UDim2.new(0.5, -70, 0, 20)
+-- Ukuran lebih kecil dan proporsional
+mainButton.Size = isMobile and UDim2.new(0.15, 0, 0.05, 0) or UDim2.new(0, 120, 0, 30)
+mainButton.Position = isMobile and UDim2.new(0.425, 0, 0.05, 0) or UDim2.new(0.5, -60, 0, 40)
 mainButton.BackgroundColor3 = DarkBg
 mainButton.Text = "🌐 THAN HUB"
 mainButton.TextColor3 = NeonBlue
 mainButton.Font = Enum.Font.GothamBold
-Instance.new("UICorner", mainButton).CornerRadius = UDim.new(0, 8)
+mainButton.TextScaled = true -- Menjaga teks tetap pas di dalam tombol
+
+local mainCorner = Instance.new("UICorner", mainButton)
+mainCorner.CornerRadius = UDim.new(0, 6)
+
 local bStroke = Instance.new("UIStroke", mainButton)
 bStroke.Color = NeonPurple
-bStroke.Thickness = 2
+bStroke.Thickness = 1.5
 
--- Main Frame
+-- Menjaga tombol tidak gepeng saat layar diputar
+local mainAspect = Instance.new("UIAspectRatioConstraint", mainButton)
+mainAspect.AspectRatio = 3.5 -- Rasio panjang vs lebar tombol
+
+-- // MAIN FRAME (Responsive Size) //
 local serverFrame = Instance.new('Frame', screenGui)
-serverFrame.Size = UDim2.new(0, 500, 0, 400)
-serverFrame.Position = UDim2.new(0.5, -250, 0.5, -200)
+-- Di Mobile, Frame akan mengambil 90% lebar layar, di PC tetap 500px
+serverFrame.Size = isMobile and UDim2.new(0.9, 0, 0.8, 0) or UDim2.new(0, 500, 0, 400)
+serverFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+serverFrame.AnchorPoint = Vector2.new(0.5, 0.5) -- Memudahkan centering
 serverFrame.BackgroundColor3 = DarkBg
 serverFrame.Visible = false
 Instance.new("UICorner", serverFrame).CornerRadius = UDim.new(0, 10)
 local fStroke = Instance.new("UIStroke", serverFrame)
 fStroke.Color = NeonPurple
 fStroke.Thickness = 2
+
+-- // CLOSE BUTTON (Penting untuk Mobile) //
+local closeBtn = Instance.new("TextButton", serverFrame)
+closeBtn.Size = UDim2.new(0, 35, 0, 35)
+closeBtn.Position = UDim2.new(1, -40, 0, 5)
+closeBtn.BackgroundTransparency = 1
+closeBtn.Text = "✕"
+closeBtn.TextColor3 = Color3.new(1, 0, 0)
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 20
+closeBtn.MouseButton1Click:Connect(function()
+    serverFrame.Visible = false
+end)
 
 -- Title
 local headerTitle = Instance.new("TextLabel", serverFrame)
@@ -145,12 +174,12 @@ headerTitle.BackgroundTransparency = 1
 headerTitle.Text = "SERVER BROWSER"
 headerTitle.TextColor3 = NeonPurple
 headerTitle.Font = Enum.Font.GothamBold
-headerTitle.TextSize = 18
+headerTitle.TextSize = isMobile and 14 or 18
 
--- Search
+-- Search Container (Responsive Width)
 local searchContainer = Instance.new("Frame", serverFrame)
-searchContainer.Size = UDim2.new(1, -40, 0, 35)
-searchContainer.Position = UDim2.new(0, 20, 0, 55)
+searchContainer.Size = UDim2.new(0.9, 0, 0, 35)
+searchContainer.Position = UDim2.new(0.05, 0, 0, 55)
 searchContainer.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 Instance.new("UICorner", searchContainer)
 local sStroke = Instance.new("UIStroke", searchContainer)
@@ -158,98 +187,87 @@ sStroke.Color = NeonBlue
 sStroke.Thickness = 1
 
 local searchBar = Instance.new('TextBox', searchContainer)
-searchBar.Size = UDim2.new(1, -90, 1, 0)
-searchBar.Position = UDim2.new(0, 12, 0, 0)
+searchBar.Size = UDim2.new(1, -85, 1, 0)
+searchBar.Position = UDim2.new(0, 10, 0, 0)
 searchBar.BackgroundTransparency = 1
-searchBar.PlaceholderText = "Search Event (Megalodon, Whale...)"
+searchBar.PlaceholderText = "Search Event..."
 searchBar.Text = ""
 searchBar.TextColor3 = Color3.new(1,1,1)
 searchBar.Font = Enum.Font.Gotham
 searchBar.TextXAlignment = "Left"
+searchBar.TextScaled = isMobile
 
 local refreshBtn = Instance.new('TextButton', searchContainer)
-refreshBtn.Size = UDim2.new(0, 75, 0, 25)
-refreshBtn.Position = UDim2.new(1, -80, 0.5, -12)
+refreshBtn.Size = UDim2.new(0, 70, 0, 25)
+refreshBtn.Position = UDim2.new(1, -75, 0.5, -12)
 refreshBtn.BackgroundColor3 = NeonPurple
 refreshBtn.Text = "Refresh"
 refreshBtn.TextColor3 = Color3.new(1,1,1)
 refreshBtn.Font = Enum.Font.GothamBold
-refreshBtn.TextSize = 11
+refreshBtn.TextSize = 10
 Instance.new("UICorner", refreshBtn)
 
--- List
+-- List Layout
 local scrollFrame = Instance.new('ScrollingFrame', serverFrame)
-scrollFrame.Size = UDim2.new(1, -20, 1, -120)
-scrollFrame.Position = UDim2.new(0, 10, 0, 110)
+scrollFrame.Size = UDim2.new(0.95, 0, 0.65, 0)
+scrollFrame.Position = UDim2.new(0.025, 0, 0.28, 0)
 scrollFrame.BackgroundTransparency = 1
-scrollFrame.ScrollBarThickness = 2
+scrollFrame.ScrollBarThickness = 3
 scrollFrame.ScrollBarImageColor3 = NeonBlue
 local layout = Instance.new("UIListLayout", scrollFrame)
 layout.Padding = UDim.new(0, 8)
 layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
--- // ITEM GENERATOR //
--- // ITEM GENERATOR (FIXED OVERFLOW) //
+-- // TWEAK PADA ITEM GENERATOR UNTUK MOBILE //
 local function createServerItem(data)
     local item = Instance.new('Frame')
-    item.Size = UDim2.new(1, -20, 0, 85) -- Ukuran kotak sedikit dipertinggi
+    item.Size = UDim2.new(0.95, 0, 0, 65) -- Tinggi kotak dikurangi agar lebih compact
     item.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
-    Instance.new('UICorner', item)
+    Instance.new('UICorner', item).CornerRadius = UDim.new(0, 8)
     
     local iStroke = Instance.new("UIStroke", item)
     iStroke.Color = NeonBlue
-    iStroke.Transparency = 0.7
-    iStroke.Thickness = 1.2
+    iStroke.Transparency = 0.8
     
-    -- Event Label (Rapi & Tidak Out dari Kotak)
     local eventLabel = Instance.new('TextLabel', item)
-    eventLabel.Size = UDim2.new(0.65, 0, 0, 45) -- Area teks lebih luas
-    eventLabel.Position = UDim2.new(0, 15, 0, 8)
+    eventLabel.Size = UDim2.new(0.6, 0, 0.5, 0)
+    eventLabel.Position = UDim2.new(0, 12, 0, 8)
     eventLabel.BackgroundTransparency = 1
     eventLabel.Font = Enum.Font.GothamBold
     eventLabel.TextColor3 = NeonPurple
-    eventLabel.TextSize = 14
+    eventLabel.TextSize = isMobile and 11 or 13
     eventLabel.TextXAlignment = "Left"
-    eventLabel.TextYAlignment = "Top" -- Mulai dari atas
     eventLabel.Text = tostring(data.event or "None")
-    eventLabel.TextWrapped = true -- Teks otomatis turun jika kepanjangan
-    eventLabel.TextTruncate = Enum.TextTruncate.AtEnd -- Kasih "..." di ujung jika benar-benar penuh
+    eventLabel.TextWrapped = true
 
-    -- Status Label (Players & Time)
     local statusLabel = Instance.new('TextLabel', item)
-    statusLabel.Size = UDim2.new(0.65, 0, 0, 20)
-    statusLabel.Position = UDim2.new(0, 15, 1, -25) -- Tempel di bawah
+    statusLabel.Size = UDim2.new(0.6, 0, 0, 20)
+    statusLabel.Position = UDim2.new(0, 12, 0.65, 0)
     statusLabel.BackgroundTransparency = 1
     statusLabel.Font = Enum.Font.Gotham
     statusLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
-    statusLabel.TextSize = 11
+    statusLabel.TextSize = 9
     statusLabel.TextXAlignment = "Left"
     local timeStr = os.date("%H:%M", data.lastUpdated or 0)
     statusLabel.Text = "👤 " .. tostring(data.players or "0/0") .. "  •  🕒 " .. timeStr
 
-    -- Join Button
+    -- Tombol JOIN yang lebih ramping
     local join = Instance.new('TextButton', item)
-    join.Size = UDim2.new(0, 80, 0, 32)
-    join.Position = UDim2.new(1, -95, 0.5, -16)
-    join.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+    join.Size = isMobile and UDim2.new(0.25, 0, 0.45, 0) or UDim2.new(0, 70, 0, 26)
+    join.Position = UDim2.new(1, -12, 0.5, 0)
+    join.AnchorPoint = Vector2.new(1, 0.5) -- Centering vertical
+    join.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
     join.Text = "JOIN"
     join.TextColor3 = NeonBlue
     join.Font = Enum.Font.GothamBold
-    join.TextSize = 12
-    Instance.new('UICorner', join)
+    join.TextSize = 10
     
-    local jStroke = Instance.new("UIStroke", join)
-    jStroke.Color = NeonBlue
-    jStroke.Thickness = 1
-    jStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-
-    -- Hover Effects
-    join.MouseEnter:Connect(function()
-        TweenService:Create(join, TweenInfo.new(0.2), {BackgroundColor3 = NeonBlue, TextColor3 = Color3.new(1,1,1)}):Play()
-    end)
-    join.MouseLeave:Connect(function()
-        TweenService:Create(join, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(10, 10, 15), TextColor3 = NeonBlue}):Play()
-    end)
+    local joinCorner = Instance.new('UICorner', join)
+    joinCorner.CornerRadius = UDim.new(0, 4)
+    
+    local joinStroke = Instance.new("UIStroke", join)
+    joinStroke.Color = NeonBlue
+    joinStroke.Thickness = 1
 
     join.MouseButton1Click:Connect(function()
         TeleportService:TeleportToPlaceInstance(game.PlaceId, data.jobId, player)
@@ -259,17 +277,36 @@ local function createServerItem(data)
 end
 
 local function populate(filter)
-    for _, v in pairs(scrollFrame:GetChildren()) do if v:IsA("Frame") then v:Destroy() end end
+    for _, v in pairs(scrollFrame:GetChildren()) do 
+        if v:IsA("Frame") then v:Destroy() end 
+    end
+    
     local allData = fetchServersDB()
-    for _, s in pairs(allData) do
-        if filter == "" or tostring(s.event):lower():find(filter:lower()) then
-            createServerItem(s).Parent = scrollFrame
+    if not allData or type(allData) ~= "table" then return end
+
+    local count = 0
+    local maxDisplay = 50
+
+    for _, s in ipairs(allData) do
+        local eventName = tostring(s.event or ""):lower()
+        if filter == "" or eventName:find(filter:lower()) then
+            
+            if count >= maxDisplay then 
+                break 
+            end
+
+            local item = createServerItem(s)
+            item.Parent = scrollFrame
+            
+            count = count + 1
         end
     end
+    
     scrollFrame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
+    
+    headerTitle.Text = "SERVER BROWSER (" .. count .. "/50)"
 end
 
--- // INITIALIZE //
 task.spawn(function()
     while true do
         postToServerDB()
